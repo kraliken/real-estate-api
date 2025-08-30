@@ -6,3 +6,4 @@ pydantic
 pyodbc
 tzdata
 python-dotenv
+requests
