@@ -111,6 +111,41 @@ def save_real_estate(session: SessionDep):
                 max_page = max(max_page, int(m.group(1)))
         return max_page
 
+    def debug_page_content(sb):
+        """Debug információk gyűjtése"""
+        try:
+            title = sb.get_title()
+            print(f"🔍 Oldal címe: {title}")
+
+            url = sb.get_current_url()
+            print(f"🔍 Aktuális URL: {url}")
+
+            # Ellenőrizzük, hogy van-e CAPTCHA
+            captcha_elements = sb.find_elements("iframe[src*='recaptcha']")
+            if captcha_elements:
+                print(f"🤖 {len(captcha_elements)} CAPTCHA iframe található")
+
+            # Keressünk bármilyen listing elemet
+            all_listings = sb.find_elements("div[class*='listing']")
+            print(f"🔍 Összes 'listing' elem: {len(all_listings)}")
+
+            # Keressünk card elemeket
+            all_cards = sb.find_elements("div[class*='card']")
+            print(f"🔍 Összes 'card' elem: {len(all_cards)}")
+
+            # Konkrét target elemek
+            target_elements = sb.find_elements("div.listing-card-content")
+            print(f"🎯 Target elemek (listing-card-content): {len(target_elements)}")
+
+            # HTML részlet mentése debug célokra
+            html_snippet = (
+                sb.get_page_source()[:2000] if sb.get_page_source() else "No HTML"
+            )
+            print(f"🔍 HTML kezdete: {html_snippet[:500]}...")
+
+        except Exception as e:
+            print(f"❌ Debug hiba: {e}")
+
     error_log: list[str] = []
 
     def add_err(stage: str, e: Exception | str, extra: str = ""):
@@ -124,12 +159,42 @@ def save_real_estate(session: SessionDep):
     all_data = []
     page_count = 1
 
-    # Chrome telepítése (ha szükséges)
-    if not install_chrome_if_needed():
-        add_err("chrome_install", "Chrome telepítése sikertelen")
-        # Folytatjuk anélkül, hátha működik...
+    # Platform-függő Chrome opciók
+    import platform
 
-    chrome_options = get_selenium_options()
+    chrome_options = [
+        "--headless=new",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-plugins",
+        "--window-size=1920,1080",
+        "--disable-blink-features=AutomationControlled",  # Automation észlelés kikapcsolása
+        "--disable-web-security",
+        "--allow-running-insecure-content",
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    ]
+
+    # Linux-specifikus opciók (Azure App Service)
+    if platform.system() == "Linux":
+        chrome_options.extend(
+            [
+                "--single-process",
+                "--no-zygote",
+                "--disable-setuid-sandbox",
+                "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+            ]
+        )
+
+    # # Chrome telepítése (ha szükséges)
+    # if not install_chrome_if_needed():
+    #     add_err("chrome_install", "Chrome telepítése sikertelen")
+    #     # Folytatjuk anélkül, hátha működik...
+
+    # chrome_options = get_selenium_options()
 
     # with SB(uc=True, headless=True, locale="HU") as sb:
     #     print(f"🌐 Oldal betöltése: {BASE_URL}")
@@ -190,14 +255,18 @@ def save_real_estate(session: SessionDep):
             disable_csp=True,
             guest_mode=True,
             driver_version="latest",
+            page_load_strategy="eager",
         ) as sb:
             print(f"🌐 Oldal betöltése: {BASE_URL}")
             # Első oldal
             try:
                 sb.activate_cdp_mode(BASE_URL)
-                # sb.wait_for_ready_state_complete()
+                print("✅ CDP mód aktiválva")
                 try:
-                    sb.wait_for_ready_state_complete()
+                    sb.wait_for_ready_state_complete(timeout=30)
+                    print("✅ Ready state complete")
+
+                    debug_page_content(sb)
                     # sb.uc_gui_click_captcha()
                 except Exception as ce:
                     add_err("captcha_page_1", ce)
