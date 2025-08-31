@@ -123,11 +123,12 @@ def save_real_estate(session: SessionDep):
             # Első oldal
             try:
                 sb.activate_cdp_mode(BASE_URL)
-                sb.wait_for_ready_state_complete()
-                # try:
-                #     sb.uc_gui_click_captcha()
-                # except Exception as ce:
-                #     add_err("captcha_page_1", ce)
+                # sb.wait_for_ready_state_complete()
+                try:
+                    sb.wait_for_ready_state_complete()
+                    # sb.uc_gui_click_captcha()
+                except Exception as ce:
+                    add_err("captcha_page_1", ce)
                 sb.wait_for_element_visible("div.listing-card-content", timeout=20)
                 sb.scroll_to_bottom()
                 sb.sleep(0.5)
@@ -161,10 +162,11 @@ def save_real_estate(session: SessionDep):
                 try:
                     sb.uc_open(url)
                     sb.wait_for_ready_state_complete()
-                    # try:
+                    try:
+                        sb.wait_for_ready_state_complete()
                     #     sb.uc_gui_click_captcha()
-                    # except Exception as ce:
-                    #     add_err(f"captcha_page_{page}", ce)
+                    except Exception as ce:
+                        add_err(f"captcha_page_{page}", ce)
                     sb.wait_for_element_visible("div.listing-card-content", timeout=20)
                     sb.scroll_to_bottom()
                     sb.sleep(0.5)
@@ -193,7 +195,8 @@ def save_real_estate(session: SessionDep):
         add_err("browser_session", e)
 
     # ---- Note összeállítása és mentése ----
-    summary = f"oldalak száma: {page_count}, ingatlanok száma: {len(all_data)}"
+    count = session.exec(select(func.count()).select_from(Note)).one()
+    summary = f"lekérdezés: {count + 1}, oldalak száma: {page_count}, ingatlanok száma: {len(all_data)}"
     if error_log:
         listed = "\n- ".join(error_log[:10])  # limitáld az első 10 hibára
         summary += f"\nhibák:\n- {listed}"
@@ -207,7 +210,6 @@ def save_real_estate(session: SessionDep):
     #     "items": all_data,
     # }
 
-    # count = session.exec(select(func.count()).select_from(Note)).one()
     # note_text = f"oldalak száma: {page_count}, ingatlanok száma: {len(all_data)}"
 
     note = Note(note=summary, created_at=datetime.now(timezone.utc))
