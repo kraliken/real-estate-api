@@ -11,6 +11,7 @@ from seleniumbase import SB
 from bs4 import BeautifulSoup
 import re
 import os
+import subprocess
 
 router = APIRouter(prefix="/real-estate", tags=["real-estate"])
 TZ = ZoneInfo("Europe/Budapest")
@@ -20,6 +21,60 @@ BASE_URL = os.getenv("BASE_URL")
 # BASE_URL = (
 #     "https://ingatlan.com/lista/elado+lakas+nem-berleti-jog+oroszlany+fix-3-szazalek"
 # )
+
+
+def install_chrome_if_needed():
+    """Chrome és ChromeDriver telepítése Azure App Service-ben"""
+    try:
+        # Ellenőrizzük, hogy Chrome telepítve van-e
+        result = subprocess.run(
+            ["which", "google-chrome"], capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            print("✅ Chrome már telepítve van")
+            return True
+
+        print("📦 Chrome telepítése...")
+
+        # Chrome telepítő parancsok
+        commands = [
+            "apt-get update",
+            "apt-get install -y wget gnupg",
+            "wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add -",
+            "echo 'deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main' >> /etc/apt/sources.list.d/google-chrome.list",
+            "apt-get update",
+            "apt-get install -y google-chrome-stable",
+        ]
+
+        for cmd in commands:
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"❌ Hiba a telepítés során: {cmd}")
+                print(f"Stderr: {result.stderr}")
+                return False
+
+        print("✅ Chrome sikeresen telepítve")
+        return True
+
+    except Exception as e:
+        print(f"❌ Chrome telepítési hiba: {e}")
+        return False
+
+
+def get_selenium_options():
+    """Azure App Service-hez optimalizált opciók"""
+    return [
+        "--headless=new",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--disable-extensions",
+        "--disable-plugins",
+        "--window-size=1920,1080",
+        "--single-process",
+        "--disable-web-security",
+        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    ]
 
 
 @router.post("/create")
@@ -68,6 +123,13 @@ def save_real_estate(session: SessionDep):
 
     all_data = []
     page_count = 1
+
+    # Chrome telepítése (ha szükséges)
+    if not install_chrome_if_needed():
+        add_err("chrome_install", "Chrome telepítése sikertelen")
+        # Folytatjuk anélkül, hátha működik...
+
+    chrome_options = get_selenium_options()
 
     # with SB(uc=True, headless=True, locale="HU") as sb:
     #     print(f"🌐 Oldal betöltése: {BASE_URL}")
@@ -118,7 +180,17 @@ def save_real_estate(session: SessionDep):
     #         all_data.extend(page_items)
 
     try:
-        with SB(uc=True, headless=True, locale="HU") as sb:
+        with SB(
+            uc=True,
+            headless=True,
+            locale="HU",
+            chromium_arg=" ".join(chrome_options),
+            undetectable=True,
+            incognito=True,
+            disable_csp=True,
+            guest_mode=True,
+            driver_version="latest",
+        ) as sb:
             print(f"🌐 Oldal betöltése: {BASE_URL}")
             # Első oldal
             try:
